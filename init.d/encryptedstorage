@@ -1,0 +1,75 @@
+#!/bin/bash
+
+lvstorage=/dev/storage/EncryptedStorage
+encryptedstorage=/dev/mapper/enc_encrypted_storage
+mounted=/encrypted_storage
+
+start(){
+    if [ -n "$(sudo lvdisplay |awk '/Status.+NOT/{print $NF}')" ]; then
+        sudo lvchange -ay $(echo $lvstorage|sed 's/\/dev\///')
+    fi
+
+    if [ -n "$(sudo lvdisplay |awk '/Status/{print $NF}')" ]; then
+        if [ -L $lvstorage ]&&[ ! -L $encryptedstorage ]; then
+            sudo cryptsetup luksOpen $lvstorage $(basename $encryptedstorage)
+        fi
+
+    else
+        echo "LV Status check fail! have a LV ?"
+        exit 1
+    fi
+    
+    if [ -L $encryptedstorage ]; then
+        sudo mount $mounted
+        sudo chgrp adm $mounted
+        sudo chmod g+w $mounted
+    else
+        echo "Create the encrypted storage fail!"
+        exit 1
+    fi
+}
+
+stop(){
+    if [ -L $encryptedstorage ]; then
+        sudo umount $mounted
+        sudo cryptsetup luksClose $(basename $encryptedstorage)
+    else
+        echo "nothing to do."
+        exit 1
+    fi
+}
+
+exportstorage(){
+	if [ -n "$(vgchange -an storage|awk '/^0 logical volume.+storage.+active$/')" ]; then
+		if [ -n "$(vgexport storage|awk '/storage.+successfully exported$/')" ]; then
+			if [ -z "$(vgdisplay -v|awk '/storage.+exported$/')" ]; then
+				echo "Successfully exported."; exit 0;
+			else
+				echo "Export maybe fail!"; exit 1;
+			fi
+		else
+			echo "Export maybe fail! because find not about the success information."; exit 1;
+		fi
+	else
+		echo "May be cannot deactive the VG. you need manual to trouble-shooting!"; exit 1;
+	fi
+}
+
+importstorage(){
+	vgname="$(pvscan -v|awk '/PV.+\/dev\/.+exported VG /{print $7}')"
+	if [ -n "$vgname" ]; then
+		if [ -n "$(vgimport $vgname|awk '/Volume .+vg.+ successfully imported/')" ]; then
+			echo "Successfully imported."; exit 0;
+		else
+			echo "Import maybe fail!"; exit 1;
+		fi
+	else
+		echo "Find not any exported VG volume(s)!"; exit 1;
+	fi
+}
+
+case "$1" in
+    start|stop) "$1" ;;
+	exportstorage|importstorage) stop; "$1";;
+esac
+
