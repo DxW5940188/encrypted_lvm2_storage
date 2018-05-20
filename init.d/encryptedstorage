@@ -25,7 +25,7 @@ start(){
         sudo chmod g+w $mounted
     else
         echo "Create the encrypted storage fail!"
-        exit 1
+        return 1
     fi
 }
 
@@ -33,43 +33,55 @@ stop(){
     if [ -L $encryptedstorage ]; then
         sudo umount $mounted
         sudo cryptsetup luksClose $(basename $encryptedstorage)
-    else
-        echo "nothing to do."
-        exit 1
+		return $?;
     fi
 }
 
 exportstorage(){
-	if [ -n "$(vgchange -an storage|awk '/^0 logical volume.+storage.+active$/')" ]; then
-		if [ -n "$(vgexport storage|awk '/storage.+successfully exported$/')" ]; then
-			if [ -z "$(vgdisplay -v|awk '/storage.+exported$/')" ]; then
-				echo "Successfully exported."; exit 0;
+	vgname=storage
+	if [ -n "$(sudo vgchange -an storage|awk '/ 0 logical volume.+'$vgname'.+ active$/')" ]; then
+		if [ -n "$(sudo vgexport storage|awk '/'$vgname'.+successfully exported$/')" ]; then
+			if [ -z "$(sudo vgdisplay -v|awk '/'$vgname'.+exported$/')" ]; then
+				echo "Successfully exported."; return 0;
 			else
-				echo "Export maybe fail!"; exit 1;
+				echo "Export maybe fail!"; return 1;
 			fi
 		else
-			echo "Export maybe fail! because find not about the success information."; exit 1;
+			echo "Export maybe fail! because find not about the success information."; return 1;
 		fi
 	else
-		echo "May be cannot deactive the VG. you need manual to trouble-shooting!"; exit 1;
+		echo "May be cannot deactive the VG. you need manual to trouble-shooting!"; return 1;
 	fi
 }
 
 importstorage(){
-	vgname="$(pvscan -v|awk '/PV.+\/dev\/.+exported VG /{print $7}')"
+	vgname="$(sudo pvscan -v|awk '/PV.+\/dev\/.+exported VG /{print $7}')"
 	if [ -n "$vgname" ]; then
-		if [ -n "$(vgimport $vgname|awk '/Volume .+vg.+ successfully imported/')" ]; then
-			echo "Successfully imported."; exit 0;
+		sudo vgimport $vgname 2>&1 >/dev/null
+		if [ -n "$(sudo vgdisplay -v|awk '/VG Status\s+resizable$/')" ]; then
+			echo "Successfully imported."
+			if [ -n "$(sudo vgchange -ay $vgname|awk '/ 1 logical volume.+'$vgname'.+ now active/')" ]; then
+				echo "The VG $vgname is in active."; return 0;
+			else
+				echo "Active the VG $vgname fail!"; return 1;
+			fi
 		else
-			echo "Import maybe fail!"; exit 1;
+			echo "Import maybe fail!"; return 1;
 		fi
 	else
-		echo "Find not any exported VG volume(s)!"; exit 1;
+		echo "Find not any exported VG volume(s)!"; return 1;
 	fi
 }
 
 case "$1" in
     start|stop) "$1" ;;
-	exportstorage|importstorage) stop; "$1";;
+	exportstorage) 
+		stop
+		[ $? -eq 0 ] && "$1"
+		;;
+	importstorage)
+		"$1"
+		[ $? -eq 0 ] && start
+		;;
 esac
 
