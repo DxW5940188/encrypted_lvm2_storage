@@ -1,0 +1,13 @@
+---
+- name: deploy to /usr/local/bin
+  hosts: localhost
+  sudo: yes
+  tasks:
+    - name: start to deploy the encrypted-lvm-disk
+      copy:
+        src: init.d/encryptedstorage
+        dest: /usr/local/bin/
+        chown: root
+        group: root
+        mode: 0755
+        
