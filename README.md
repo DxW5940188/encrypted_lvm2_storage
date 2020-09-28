@@ -1,5 +1,5 @@
 # encrypted_lvm2_storage  
-> 實作者: Wan Pei Chih 
+> 實作者: Wan Pei Chih   
 > last edit date of 13 Jun, 2018  
 ## Description  
 Manage your encrypted lvm storage
